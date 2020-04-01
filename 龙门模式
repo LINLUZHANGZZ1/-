@@ -1,0 +1,430 @@
+#/ Controller version = 2.70
+#/ Date = 12/4/2019 2:41 PM
+#/ User remarks = 
+#0
+yHome = 0;xHome = 0;zHome = 0
+STOP 3,1
+WAIT 40
+START 1,1
+wait 40
+START 2,1
+wait 40
+START 3,1
+TILL yHome & xHome & zHome
+STOP
+
+#1
+! ------------ Define axes variables -------------------------
+INT GLOBAL M_AXIS; M_AXIS = 0 
+INT GLOBAL S_AXIS; S_AXIS = 2
+REAL TimeOut
+GLOBAL REAL HomeFastVel, HomeSlowVel
+REAL HOM_OFF_M,HOM_OFF_S
+INT ZONE;ZONE = 0
+
+HomeFastVel = 50
+HomeSlowVel = 15 
+HOM_OFF_M= -10;HOM_OFF_S= 13.2554 
+TimeOut = 100000     
+
+
+!------------ ENABLE Gantry Mode --------------------------
+IF ^MFLAGS(M_AXIS).25 | ^MFLAGS(S_AXIS).25 ! CHECK IF IN GANTRY MODE
+  CALL GANTRY_MODE !SET GANTRY MODE GAIN
+  WAIT 10
+END
+
+ERRORMAPOFF M_AXIS, ZONE
+ERRORMAPOFF S_AXIS, ZONE
+
+SAFETYGROUP(M_AXIS,S_AXIS)
+FDEF(M_AXIS).#LL=0 ; FDEF(S_AXIS).#LL=0 
+FDEF(M_AXIS).#SLL=0 ; FDEF(S_AXIS).#SLL=0 
+FDEF(M_AXIS).#SRL=0 ; FDEF(S_AXIS).#SRL=0 
+
+VEL(M_AXIS) = HomeFastVel;
+ACC(M_AXIS) = 10*VEL(M_AXIS); DEC(M_AXIS) = 2*ACC(M_AXIS);JERK(M_AXIS) = 5*ACC(M_AXIS);KDEC(M_AXIS) = 2*JERK(M_AXIS)
+VEL(S_AXIS) = 10
+ACC(S_AXIS) = 10*VEL(S_AXIS); DEC(S_AXIS) = ACC(S_AXIS);JERK(S_AXIS) = 5*ACC(S_AXIS);KDEC(S_AXIS) = 2*JERK(S_AXIS)
+
+!------------ Homing procedure -----------------------------------	
+ENABLE (M_AXIS)
+TILL MST(M_AXIS).#ENABLED 
+JOG/v (M_AXIS), -HomeFastVel 
+TILL FAULT(M_AXIS).#LL, TimeOut
+	IF ^FAULT(M_AXIS).#LL ; GOTO Time_Out; END
+JOG/v (M_AXIS), HomeFastVel
+TILL ^FAULT(M_AXIS).#LL 
+HALT (M_AXIS)
+TILL (^MST(M_AXIS).#MOVE) 
+WAIT 100 
+
+CALL DISABLE_GANTRY_MODE 
+WAIT 200
+ENABLE (M_AXIS)
+WAIT 80
+SET FPOS(M_AXIS)=0; SET FPOS(S_AXIS)=0
+WAIT 10
+IST(M_AXIS).#IND=1; IST(S_AXIS).#IND=1
+IST(M_AXIS).#IND=0; IST(S_AXIS).#IND=0 
+
+JOG/v (M_AXIS), HomeSlowVel/2;
+TILL (IST(M_AXIS).#IND & IST(S_AXIS).#IND),TimeOut 
+	IF ^( IST(M_AXIS).#IND & IST(S_AXIS).#IND);  goto Time_Out;end
+HALT (M_AXIS);
+TILL (^MST(M_AXIS).#MOVE) ; WAIT 100
+disp "IND0=", IND(0);disp "IND2=", IND(2);DISP IND2-IND0
+
+CALL GANTRY_MODE
+SET FPOS(M_AXIS)=FPOS(M_AXIS)-(IND(S_AXIS)+IND(M_AXIS))/2+ HOM_OFF_M
+SET FPOS(S_AXIS)=(IND(S_AXIS)-IND(M_AXIS))-HOM_OFF_S
+
+ENABLE M_AXIS;WAIT 100
+PTP/EV M_AXIS,0,2*HomeSlowVel
+!PTP/EV S_AXIS,0,2*HomeSlowVel
+!CALL SET_EM;WAIT 10
+FDEF(M_AXIS).#LL=1 
+FDEF(S_AXIS).#LL=1
+FDEF(M_AXIS).#SLL=1 ; FDEF(S_AXIS).#SLL= 1
+FDEF(M_AXIS).#SRL=1 ; FDEF(S_AXIS).#SRL= 1 
+!CALL ERRORMAPY
+yHome = 1
+STOP
+
+Time_Out:
+Halt (M_AXIS, S_AXIS); disable (M_AXIS, S_AXIS)
+STOP
+
+DISABLE_GANTRY_MODE:
+!------ DISABLE AXIS ------------
+DISABLE (0);DISABLE (2)
+!------ DISABLE GANTRY MODE------------
+MFLAGS(0).25= 0;MFLAGS(2).25= 0;
+!------ Configuration variables ------------ 
+CERRI(0) = 2;
+CERRV(0) = 2;
+CERRA(0) = 2;
+XRMS(0) = 34;
+XCURI(0) = 50;
+XCURV(0) = 100;
+!------ POSITION LOOP GAIN ------------ 
+SLPKP(0) = 10;
+SLPKPSF(0) = 1;
+SLPKPIF(0) = 1;
+!------ VELOCITY LOOP GAIN ------------
+SLVKP(0) = 350;
+SLVKI(0) = 350;
+SLVLI(0) = 50;
+!------ SECOND LOW PASS ------------
+MFLAGS(0).15 = 0;
+SLVSOF(0) = 500;
+SLVSOFD(0) = 0.707;
+!------ NOTCH FILTER ------------
+MFLAGS(0).14 = 0;
+SLVNFRQ(0) = 560;
+SLVNWID(0) = 10;
+SLVNATT(0) = 3; 
+!------ BI-QUAD FILTER ------------
+MFLAGS(0).16 = 0;
+SLVB0NF(0) = 450;
+SLVB0DF(0) = 450;
+SLVB0ND(0) = 0.6;
+SLVB0DD(0) = 0.707;
+!------ BI-QUAD2 FILTER ------------
+MFLAGS(0).26 = 0;
+SLVB1NF(0) = 1170;
+SLVB1DF(0) = 1170;
+SLVB1ND(0) = 0.2;
+SLVB1DD(0) = 0.8;
+!------ ACCELERATION FEEDFORWARD ------------
+SLAFF(0) = 7000
+!------ Configuration variables ------------ 
+CERRI(2) = 2;
+CERRV(2) = 2;
+CERRA(2) = 2;
+XRMS(2) = 34;
+XCURI(2) = 50;
+XCURV(2) = 100;
+!------ POSITION LOOP GAIN ------------ 
+SLPKP(2) = 10;
+SLPKPSF(2) = 1;
+SLPKPIF(2) = 1;
+!------ VELOCITY LOOP GAIN ------------
+SLVKP(2) = 350;
+SLVKI(2) = 450;
+SLVLI(2) = 50;
+!------ SECOND LOW PASS ------------
+MFLAGS(2).15 = 0;
+SLVSOF(2) = 500;
+SLVSOFD(2) = 0.707;
+!------ NOTCH FILTER ------------
+MFLAGS(2).14 = 0;
+SLVNFRQ(2) = 560;
+SLVNWID(2) = 10;
+SLVNATT(2) = 3;
+!------ BI-QUAD FILTER ------------
+MFLAGS(2).16 = 0;
+SLVB0NF(2) = 450;
+SLVB0DF(2) = 450;
+SLVB0ND(2) = 0.6;
+SLVB0DD(2) = 0.707;
+!------ BI-QUAD2 FILTER ------------
+MFLAGS(2).26 = 0;
+SLVB1NF(2) = 1170;
+SLVB1DF(2) = 1170;
+SLVB1ND(2) = 0.2;
+SLVB1DD(2) = 0.8;
+!------ ACCELERATION FEEDFORWARD ------------
+SLAFF(2) = 7000
+RET
+
+GANTRY_MODE:
+!------ ENABLE AXIS ------------
+DISABLE (0);DISABLE (2)
+!------ ENABLE GANTRY MODE------------
+MFLAGS(0).25= 1;MFLAGS(2).25= 1;
+!------ Configuration variables ------------ 
+CERRI(0) = 2;
+CERRV(0) = 2;
+CERRA(0) = 2;
+XRMS(0) = 45;
+XCURI(0) = 45;
+XCURV(0) = 90;
+!------ POSITION LOOP GAIN ------------ 
+SLPKP(0) = 20;
+SLPKPSF(0) = 1;
+SLPKPIF(0) = 1;
+!------ VELOCITY LOOP GAIN ------------
+SLVKP(0) = 550;
+SLVKI(0) = 750;
+SLVLI(0) = 50;
+!------ SECOND LOW PASS ------------
+MFLAGS(0).15 = 0;
+SLVSOF(0) = 300;
+SLVSOFD(0) = 0.707;
+!------ NOTCH FILTER ------------
+MFLAGS(0).14 = 0;
+SLVNFRQ(0) = 560;
+SLVNWID(0) = 10;
+SLVNATT(0) = 3;
+!------ BI-QUAD FILTER ------------
+MFLAGS(0).16 = 0;
+SLVB0NF(0) = 436.93;
+SLVB0DF(0) = 436.93;
+SLVB0ND(0) = 0.06;
+SLVB0DD(0) = 0.12;
+!------ BI-QUAD2 FILTER ------------
+MFLAGS(0).26 = 0;
+SLVB1NF(0) = 1170;
+SLVB1DF(0) = 1170;
+SLVB1ND(0) = 0.2;
+SLVB1DD(0) = 0.8;
+!------ ACCELERATION FEEDFORWARD ------------
+SLAFF(0) = 3000
+!------ Configuration variables ------------ 
+CERRI(2) = 2;
+CERRV(2) = 2;
+CERRA(2) = 2;
+XRMS(2) = 45;
+XCURI(2) = 20;
+XCURV(2) = 30;
+!------ POSITION LOOP GAIN ------------ 
+SLPKP(2) = 10;
+SLPKPSF(2) = 1;
+SLPKPIF(2) = 1;
+!------ VELOCITY LOOP GAIN ------------
+SLVKP(2) = 50;
+SLVKI(2) = 150;
+SLVLI(2) = 50;
+!------ SECOND LOW PASS ------------
+MFLAGS(2).15 = 0;
+SLVSOF(2) = 500;
+SLVSOFD(2) = 0.707;
+!------ NOTCH FILTER ------------
+MFLAGS(2).14 = 0;
+SLVNFRQ(2) = 560;
+SLVNWID(2) = 10;
+SLVNATT(2) = 3;
+!------ BI-QUAD FILTER ------------
+MFLAGS(2).16 = 0;
+SLVB0NF(2) = 450;
+SLVB0DF(2) = 450;
+SLVB0ND(2) = 0.6;
+SLVB0DD(2) = 0.707;
+!------ BI-QUAD2 FILTER ------------
+MFLAGS(2).26 = 0;
+SLVB1NF(2) = 1170;
+SLVB1DF(2) = 1170;
+SLVB1ND(2) = 0.2;
+SLVB1DD(2) = 0.8;
+!------ ACCELERATION FEEDFORWARD ------------
+SLAFF(2) = 0
+RET
+
+ERRORMAPY:
+M_AXIS_Pos (0) =0 
+M_AXIS_Pos (1) =80 
+M_AXIS_Pos (2) =160 
+M_AXIS_Pos (3) =240 
+M_AXIS_Pos (4) =320 
+M_AXIS_Pos (5) =400 
+M_AXIS_Pos (6) =480 
+M_AXIS_Pos (7) =560 
+M_AXIS_Pos (8) =640 
+M_AXIS_Pos (9) =720 
+M_AXIS_Pos (10) =800 
+M_AXIS_Pos (11) =880 
+M_AXIS_Pos (12) =960 
+M_AXIS_Pos (13) =1040 
+M_AXIS_Pos (14) =1120 
+M_AXIS_Pos (15) =1200 
+M_AXIS_Pos (16) =1280 
+M_AXIS_Pos (17) =1360 
+M_AXIS_Pos (18) =1440 
+M_AXIS_Pos (19) =1520 
+M_AXIS_Pos (20) =1600 
+M_AXIS_Pos (21) =1680 
+M_AXIS_Pos (22) =1760 
+M_AXIS_Pos (23) =1840 
+M_AXIS_Pos (24) =1920 
+M_AXIS_Pos (25) =2000 
+M_AXIS_Pos (26) =2080 
+M_AXIS_Pos (27) =2160 
+M_AXIS_Pos (28) =2240 
+M_AXIS_Pos (29) =2320 
+
+M_AXIS_ERRORMAP(0) = 0
+
+S_AXIS_ERRORMAP(0) = 0
+
+ERRORUNMAP M_AXIS, ZONE
+ERRORUNMAP S_AXIS, ZONE
+ERRORMAPN1D M_AXIS, ZONE, M_AXIS_Pos , M_AXIS_ERRORMAP
+ERRORMAPN1D S_AXIS, ZONE, M_AXIS_Pos , S_AXIS_ERRORMAP
+ERRORMAPON M_AXIS, ZONE
+ERRORMAPON S_AXIS, ZONE
+RET
+
+#2
+INT iAxis;iAxis = 1
+INT ZONE;ZONE = 0
+REAL BASE,STEP;BASE = 0;STEP = 60
+REAL HOMEVEL;HOMEVEL = 50
+REAL HOMEOFFSET;HOMEOFFSET = 10
+DISABLE (iAxis)
+WAIT 80
+ERRORMAPOFF iAxis,ZONE
+ENABLE (iAxis)
+WAIT 80
+HOME iAxis,1,HOMEVEL,4880,HOMEOFFSET
+TILL MFLAGS(iAxis).#HOME
+PTP/EV iAxis,0,HOMEVEL
+!CALL ERRORMAPX
+STOP
+
+ERRORMAPX:
+CORRECTION_MAP_X(0) = 0;
+
+CORRECTION_MAP_X (0) =0 
+CORRECTION_MAP_X (1) =1 
+CORRECTION_MAP_X (2) =2 
+CORRECTION_MAP_X (3) =3 
+CORRECTION_MAP_X (4) =4 
+CORRECTION_MAP_X (5) =5 
+CORRECTION_MAP_X (6) =6 
+CORRECTION_MAP_X (7) =7 
+CORRECTION_MAP_X (8) =8 
+CORRECTION_MAP_X (9) =9 
+CORRECTION_MAP_X (10) =10 
+ERRORUNMAP iAxis,ZONE 
+ERRORMAP1D iAxis,ZONE,BASE,STEP,CORRECTION_MAP_X
+ERRORMAPON iAxis,ZONE 
+
+RET
+
+#3
+!iAxis 4 Homing
+
+global INT iAxis,fiAxis           ! Define a global variable named "iiAxis"
+REAL HOM_VEL,HOM_OFFSET 
+iAxis = 4               ! Define the iiAxis name (0=X iAxis, 1=Y iAxis...)
+fiAxis = 3
+MFLAGS(iAxis).17 = 1
+HOM_VEL=5
+HOM_OFFSET=10
+VEL(iAxis)= 5        ! Set maximum velocity
+ACC(iAxis)= 50	      ! Set acceleration
+DEC(iAxis)= 50      ! Set deceleration
+JERK(iAxis)= 500   ! Set jerk
+KDEC(iAxis)= 500     ! Set kill deceleration
+FDEF(iAxis).#LL=0       ! Disable the iiAxis left limit default response
+!FDEF(iiAxis).#RL=0       ! Disable the iiAxis right limit default response
+ENABLE (iAxis)          ! Enable the iiAxis drive
+JOG/V (iAxis),-HOM_VEL           ! Move to the left limit switch 
+TILL FAULT(iAxis).#LL   ! Wait for the left limit switch activation
+  ! Can be written also as "TILL ABS(PE(iiAxis))>???" when no limit switches exist - only a hard stop.
+JOG/V (iAxis),HOM_VEL/5           ! Move to the encoder index
+TILL ^FAULT(iAxis).#LL  ! Wait for the left limit release
+IST(fiAxis).#IND=0       ! Reset the index flag - activate index circuit
+TILL IST(fiAxis).#IND    ! Wait for crossing the index
+SET FPOS(fiAxis)=FPOS(fiAxis)-(IND(fiAxis)+HOM_OFFSET)  ! Set iiAxis origin to the position of index = zero
+SET FPOS(iAxis) = FPOS(fiAxis)
+
+PTP/E (iAxis),0           ! Move to the origin
+FDEF(iAxis).#LL=1       ! Enable the iiAxis left limit default response
+FDEF(iAxis).#RL=1       ! Enable the iiAxis right limit default response
+zHome = 1
+
+!pdmnt close loop
+global real ST_PE ! position error
+global real ST_OUT ! output of servo loop
+global real ST_KI ! integrator gain
+global real S_LIM ! max correction rate
+S_LIM = 900
+ST_KI = 4
+ST_OUT = 0
+ST_PE = 0
+!!! Disable to start
+DISABLE (iAxis)
+!!! Reset position error
+SET APOS(iAxis) = FPOS(fiAxis)
+SET PE(iAxis) = 0
+MFLAGS(iAxis).17 = 0 ! Allow non-default connection
+!!! Setup connect function
+CONNECT RPOS(iAxis) = APOS(iAxis) + ST_OUT
+DEPENDS (iAxis),(iAxis)
+!!! Enable and run verification program
+ENABLE (iAxis)
+while 1
+	block
+		! Calculate position offset
+		ST_PE = APOS(iAxis)-FPOS(fiAxis)
+		! Check if commanded motion complete
+		if ((APOS(iAxis)-DAPOS(iAxis)) = 0)
+		! Update correction output
+		ST_OUT=ST_OUT+sat(ST_KI*ST_PE,-S_LIM,S_LIM)/(1000/CTIME)
+		end
+	end; 
+end
+STOP
+! Reset correction output when disabled
+ON ^MST(iAxis).#ENABLED; ST_OUT=0;ret
+
+STOP  
+
+
+#5
+ErrorOffset:
+ENABLE(0)
+TILL MST(0).#ENABLED
+LOOP 1
+ PTP/EV 0,0,30 
+ WAIT 4000
+ DISP FPOS(2)
+ LOOP 29
+     PTP/REV 0,80,20
+     WAIT 4000
+ END
+
+END
+STOP
