@@ -1,0 +1,63 @@
+#/ Controller version = 2.30.03
+#/ Date = 2017/7/3 11:21
+#/ User remarks = 
+#1
+INT GLOBAL iAxis;  iAxis = 2               !define the axis     定义轴号
+INT GLOBAL iHOME;  iHOME = 0               !define homeflag and turn off it    定义回零状态，并置零
+REAL GLOBAL iHomeoffset;  iHomeoffset = 1  !define home offset                 定义回零偏移
+
+!******ENABLE axis before commut***************    在换相之前给轴使能
+ENABLE iAxis                       //使能轴                              
+TILL MST(iAxis).#ENABLED          //判断轴是否真的被使能
+!********************************
+
+!******commut axis before moving***
+IF ^MFLAGS(iAxis).9              //判断轴是否没有换相            
+COMMUT iAxis,30                  //给轴换相
+END
+!**********************************
+
+Real iHome_Velocity; iHome_Velocity=50    !set the home Velocity     设置回零速度
+
+!******set the motion parameter       //设置运动参数
+
+VEL(iAxis)= 10
+ACC(iAxis)= 100
+DEC(iAxis)= 100
+JERK(iAxis)= 1000
+!******************************
+
+FDEF(iAxis).#LL=0   !turn off the default response of hardware left limit   关闭硬件左限位的默认响应
+
+!******ENABLE axis before moving ***************   在轴运动之前给轴使能
+ENABLE (iAxis)      
+TILL MST(iAxis).#ENABLED                       //判断轴是否真的使能完成
+!***********************************************
+
+MFLAGS(iAxis).#DEFCON=1  !set the default connect between APOS and RPOS   设置APOS(轴的位置)和RPOS(参考位置)之间的默认连接 APOS = RPOS
+
+JOG/v (iAxis),-iHome_Velocity  !JOG negative(否定拒绝) to the hardware() left limit 
+TILL FAULT(iAxis).#LL          !wait for tha axis move to the hardware left limit   等待轴运动到硬件的左限位
+
+!****** JOG to the index and then set the home positon*********
+JOG/v (iAxis),+iHome_Velocity*0.1   ! JOG positive to the index
+TILL ^FAULT(iAxis).#LL              ! Wait for the axis leave the hardware left limit 
+
+IST(iAxis).#IND=0                       ! Reset the index flag - activate index circuit
+TILL IST(iAxis).#IND                    ! Wait for crossing the index
+HALT iAxis                              ! Halt the axis
+SET FPOS(iAxis)=FPOS(iAxis)- IND(iAxis) - iHomeoffset  !set the home positon
+!***************************************************************
+
+PTP/ev (iAxis),0, iHome_Velocity        !move to the home positon
+
+FDEF(iAxis).#LL=1                       !turn on the default response of hardware left limit
+
+iHOME = 1                               !turn on the homeflag
+STOP
+
+#A
+!axisdef X=0,Y=1,Z=2,T=3,A=4,B=5,C=6,D=7
+!axisdef x=0,y=1,z=2,t=3,a=4,b=5,c=6,d=7
+global int I(100),I0,I1,I2,I3,I4,I5,I6,I7,I8,I9,I90,I91,I92,I93,I94,I95,I96,I97,I98,I99
+global real V(100),V0,V1,V2,V3,V4,V5,V6,V7,V8,V9,V90,V91,V92,V93,V94,V95,V96,V97,V98,V99
